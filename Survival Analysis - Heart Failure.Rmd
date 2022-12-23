@@ -1,0 +1,377 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code.
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*.\
+
+# 1. Introduction
+
+## 1.1. Abstract
+
+Heart failure -- sometimes known as congestive heart failure --- occurs when the heart muscle doesn't pump blood as well as it should. When this happens, blood often backs up, flows back and fluid can build up in the lungs, causing shortness of breath. Certain heart conditions, such as narrowed arteries in the heart (coronary artery disease) or high blood pressure, gradually leave the heart too weak or too stiff to fill and pump blood properly, and can lead to heart failure. Heart failure is a serious condition with high prevalence (about 2% in the adult population in developed countries, and more than 8% in patients older than 75 years). The cost for society is high, reaching up to 2% of total healthcare expenditure in developed countries. Hence the importance of being able to analyse and predict what factors are more likely to shorten the duration of life after heart failure is diagnosed
+
+## 1.2. Dataset
+
+This dataset contains the medical records of 299 patients who suffered heart failure. The data has been collected during their follow-up period, and each patient observation has 13 clinical features.
+
+Thirteen (13) clinical features:
+
+-   age: age of the patient (in years)
+-   anaemia (0 for no, 1 for yes): decrease of red blood cells or hemoglobin (boolean)
+-   high blood pressure (0 for no, 1 for yes): if the patient has hypertension (boolean)
+-   creatinine phosphokinase (CPK): level of the CPK enzyme in the blood (mcg/L)
+-   diabetes (0 for no, 1 for yes): if the patient has diabetes (boolean)
+-   ejection fraction: percentage of blood leaving the heart at each contraction (percentage)
+-   platelets: platelets in the blood (kiloplatelets/mL)
+-   sex: woman or man (binary)
+-   serum creatinine: level of serum creatinine in the blood (mg/dL)
+-   serum sodium: level of serum sodium in the blood (mEq/L)
+-   smoking: if the patient smokes or not (boolean)
+-   time: follow-up period (days)
+-   [target] death event (0 for censored, 1 for death): if the patient deceased during the follow-up period (boolean)
+
+Data source: <https://archive.ics.uci.edu/ml/machine-learning-databases/00519/>
+
+## 1.3. Methodology
+
+-   General description of data
+-   Using Kaplan-Meir for the entire dataset and categorical variables
+-   Build Cox Proportional Hazard model.
+-   Variable selection on Cox model to determine the most relevant variables.
+-   Model diagnostics and tests.
+
+# 2. Data exploration
+
+
+
+
+
+
+
+
+```{r}
+#load relevant packages
+
+
+install.packages("survminer")
+library(survminer)
+
+
+library(survival)
+library(ggplot2)
+library(tidyverse)
+
+if(!require(My.stepwise)){
+    install.packages("My.stepwise")
+    library(My.stepwise)
+}
+
+if(!require(corrr)){
+    install.packages("corrr")
+    library(corrr)
+}
+
+if(!require(gtools)){
+    install.packages("gtools")
+    library(gtools)
+}
+
+if(!require(caTools)){
+    install.packages("caTools")
+    library(caTools)
+}
+
+if(!require(MASS)){
+    install.packages("MASS")
+    library(MASS)
+}
+
+
+install.packages('pixiedust')
+library(pixiedust)
+
+```
+
+```{r}
+# load dataset
+
+df <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/00519/heart_failure_clinical_records_dataset.csv")
+df
+```
+
+```{r}
+# Let's look at a summary of the explanatory variables
+summary(df)
+```
+
+```{r}
+summary(df$age)
+```
+
+```{r}
+# Quick view at the target variable distribution: target DEATH EVENT is a bollean 
+table(df$DEATH_EVENT)
+```
+
+```{r}
+### Check for Missing Values
+colSums(is.na(df))
+```
+
+## 3. Models
+
+### 3.1. Kaplan Meir
+
+```{r}
+df_time=as.vector(df$time) 
+df_death=as.vector(df$DEATH_EVENT) 
+df_fit = surv_fit(Surv(df_time,df_death)~1, data=df) 
+plot(df_fit, main = "Kaplan-Meier Survival Function", xlab = "Time in Days", ylab = "S(t)", col = "blue")
+```
+
+```{r}
+quantile(df_fit,c(0.25))$q # survival time at 25th percentile
+quantile(df_fit,c(0.5))$q  # survival time at 50th percentile
+sfit <- summary(df_fit)
+sfit$surv[sfit$time == 50]
+
+```
+The survival function never goes down 0.5, then no median survival rate.
+The probability of surviving past 50 days is 83.1%
+
+```{r}
+
+#KM graphs adjusted for various categorical variables:
+
+
+df_sex = as.factor(df$sex) 
+df_sex_fit = surv_fit(Surv(df_time,df_death)~sex, data=df) 
+
+plot(df_sex_fit, 
+     main = "Kaplan-Meier Survival Function for gender", 
+     xlab = "Time in Days ", 
+     ylab = "S(t)", 
+     col= c("blue","red")) 
+legend("bottomleft",legend = c("Female","Male"),fill=c("blue","red"))
+
+
+df_anaemia = as.factor(df$anaemia) 
+df_anaemia_fit = surv_fit(Surv(df_time,df_death)~df_anaemia, data=df) 
+plot(df_anaemia_fit, main = "Kaplan-Meier Survival Function for Anaemia", xlab = "Time in Days ", ylab = "S(t)", col= c("blue","red")) 
+legend("bottomleft",legend = c("Non anaemia","Anaemia"),fill=c("blue","red"))
+
+
+df_smoking = as.factor(df$smoking) 
+df_smoking_fit = surv_fit(Surv(df_time,df_death)~df_smoking, data=df) 
+plot(df_smoking_fit, main = "Kaplan-Meier Survival Function for smoking", xlab = "Time in Days ", ylab = "S(t)", col= c("blue","red")) 
+legend("bottomleft",legend = c("Non smoking","Smoking"),fill=c("blue","red"))
+
+df_diabetes = as.factor(df$diabetes) 
+df_diabetes_fit = surv_fit(Surv(df_time,df_death)~df_diabetes, data=df) 
+plot(df_diabetes_fit, main = "Kaplan-Meier Survival Function for diabetes", xlab = "Time in Days ", ylab = "S(t)", col= c("blue","red")) 
+legend("bottomleft",legend = c("Non diabete","diabete"),fill=c("blue","red"))
+
+
+df_blood = as.factor(df$high_blood_pressure) 
+df_blood_fit = surv_fit(Surv(df_time,df_death)~df_blood, data=df) 
+plot(df_blood_fit, main = "Kaplan-Meier Survival Function for Blood Pressure", xlab = "Time in Days ", ylab = "S(t)", col= c("blue","red")) 
+legend("bottomleft",legend = c("Non high blood pressure","High blood pessure"),fill=c("blue","red"))
+```
+```{r}
+#Looking at the survdiff functions:
+
+survdiff (Surv(df_time,df_death)~sex, data=df)
+survdiff (Surv(df_time,df_death)~df_anaemia, data=df)
+survdiff (Surv(df_time,df_death)~df_smoking, data=df)
+survdiff (Surv(df_time,df_death)~df_diabetes, data=df)
+survdiff (Surv(df_time,df_death)~df_blood, data=df)
+
+```
+
+
+## 3.2. Cox proportional hazard model:
+
+```{r}
+
+# splitting data between train and test sets
+
+set.seed(1234)
+i.training <- sample.int(nrow(df), size = ceiling(4*nrow(df)/5), replace = FALSE)
+i.testing <- setdiff(seq_len(nrow(df)), i.training)
+df_training <- df[i.training, ]
+df_testing <- df[i.testing, ]
+
+df_training
+```
+
+
+```{r}
+#Model with all variables:
+
+
+cox_fit_all_training= coxph(Surv(time,DEATH_EVENT) ~ age + creatinine_phosphokinase + anaemia + diabetes + ejection_fraction + high_blood_pressure + platelets + serum_creatinine + serum_sodium + sex + smoking, df_training)
+
+
+summary (cox_fit_all_training) 
+```
+It is clear that age, ejection_fraction, serum_creatinine are the most significant variables 
+
+```{r}
+
+#Three-variable model:
+cox3_fit_training = coxph(Surv(time,DEATH_EVENT) ~ age +ejection_fraction + serum_creatinine, data=df_training) 
+summary (cox3_fit_training)
+```
+
+
+```{r}
+#compare three-varibale to full model:
+anova(cox3_fit_training, cox_fit_all_training)
+```
+
+
+```{r}
+cox_fit_maic <- step(cox_fit_all_training)
+```
+
+```{r}
+#Compare thre-variable model to seven-variable model:
+
+anova(cox3_fit_training, cox_fit_maic)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+```{r}
+#For c-statistic testing we build six models:
+
+
+
+#Three-variable model:
+cox3_fit_training = coxph(Surv(time,DEATH_EVENT) ~ age +ejection_fraction + serum_creatinine, data=df_training) 
+summary (cox3_fit_training)
+
+#Four-variable model:
+cox4_fit_training = coxph(Surv(time,DEATH_EVENT) ~ age +ejection_fraction  + serum_creatinine + anaemia, data=df_training) 
+summary (cox4_fit_training)
+
+
+#Five-variable model:
+cox5_fit_training = coxph(Surv(time,DEATH_EVENT)  ~ age +ejection_fraction + serum_creatinine+ anaemia+ high_blood_pressure, data=df_training) 
+summary (cox5_fit_training)
+
+#Six-variable model:
+cox6_fit_training = coxph(Surv(time,DEATH_EVENT)  ~ age +ejection_fraction + serum_creatinine +anaemia+ high_blood_pressure+ creatinine_phosphokinase , data=df_training) 
+summary (cox6_fit_training)
+
+#Seven-variable model:
+cox7_fit_training = coxph(Surv(time,DEATH_EVENT)  ~ age +ejection_fraction +serum_creatinine +anaemia  + high_blood_pressure+ creatinine_phosphokinase+serum_sodium, data=df_training) 
+summary (cox7_fit_training)
+
+# Eleven-variable (full) model:
+
+cox11_fit_training= coxph(Surv(time,DEATH_EVENT) ~ age + creatinine_phosphokinase + anaemia + diabetes + ejection_fraction + high_blood_pressure + platelets + serum_creatinine + serum_sodium + sex + smoking, df_training)
+
+summary (cox11_fit_training)
+
+
+```
+
+
+
+```{r}
+#add linear predictor (lp) from each model to the testing set
+df_testing$lp_3 <- predict(cox3_fit_training, newdata = df_testing, type = "lp")
+df_testing$lp_4 <- predict(cox4_fit_training, newdata = df_testing, type = "lp")
+df_testing$lp_5 <- predict(cox5_fit_training, newdata = df_testing, type = "lp")
+df_testing$lp_6 <- predict(cox6_fit_training, newdata = df_testing, type = "lp")
+df_testing$lp_7 <- predict(cox7_fit_training, newdata = df_testing, type = "lp")
+df_testing$lp_11 <- predict(cox11_fit_training, newdata = df_testing, type = "lp")
+
+df_testing
+```
+```{r}
+#Build new models on the testing set with lps as varaibles and look at the c-statistic
+models <- list(
+    A = coxph(Surv(time,DEATH_EVENT) ~ lp_3, data = df_testing),
+    B= coxph(Surv(time,DEATH_EVENT) ~ lp_4, data = df_testing),
+    C = coxph(Surv(time,DEATH_EVENT) ~ lp_5, data = df_testing),
+    D = coxph(Surv(time,DEATH_EVENT) ~ lp_6, data = df_testing),
+    E = coxph(Surv(time,DEATH_EVENT) ~ lp_7, data = df_testing),
+    F = coxph(Surv(time,DEATH_EVENT) ~ lp_11, data = df_testing)
+  )
+
+
+map_dbl(models, ~ summary(.)$concordance[1])
+```
+
+
+```{r}
+#compare coefficients:
+
+summary (models$A)
+summary (models$B)
+summary (models$C)
+summary (models$D)
+summary (models$E)
+summary (models$F)
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+#Perform lo-log test on categorical variables:
+
+
+cloglog <- function(x)
+{ log(-log(x))}
+
+ggsurvplot(df_anaemia_fit, fun=cloglog, legend.labs=c("Non anaemia","Anaemia"))+labs(x="Days Before Death",y="Log of survival probability",title="C-log-log plot for anaemia variable")
+ggsurvplot(df_blood_fit, fun=cloglog, legend.labs=c("Non high blood pressure","High blood pessure"))+labs(x="Days Before Death",y="Log of survival probability",title="C-log-log plot for high blood pressure variable")
+```
+
+
+
+```{r}
+
+#Perform row-deletion to test stability of the model
+dat <- df
+cox6_fit_final = coxph(Surv(time,DEATH_EVENT)  ~ age +ejection_fraction + serum_creatinine +anaemia+ high_blood_pressure+ creatinine_phosphokinase , data=dat) 
+summary (cox6_fit_final)
+
+ dfbetas = residuals(cox6_fit_final , type = 'dfbetas')
+dat$dfbetas = sqrt(rowSums(dfbetas^2))
+
+plot(dat$dfbetas , type = 'h')
+ abline(h = 0)
+
+```
+
+```{r}
+
+set.seed(123214)
+i.training <- sample.int(nrow(df), size = ceiling(nrow(df)/75), replace = FALSE)
+i.testing <- setdiff(seq_len(nrow(df)), i.training)
+df_pred <- df[i.training, ]
+
+df_pred
+
+data_new <- df_pred
+pred.cph <- survfit(cox6_fit_final, newdata = data_new, type = "aalen")
+pred.cph
+plot(pred.cph, main = "Survival probability", xlab = "Time in Days ", ylab = "Probability", col= c("blue","red", "green", "brown")) 
+legend("bottomleft",legend = c("P6","P5", "P133", "P17"),fill=c("blue","red", "green", "brown"))
+
+```
+
