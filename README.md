@@ -10,4 +10,4 @@ Heart failure is a serious condition with high prevalence (about 2% in the adult
 
 ### The results
 
-The report of this survival analysis is available in the file [Survival Analysis - Heart Failure Report.pdf](https://github.com/timdgn/Survival-Analysis-Heart-Failure/blob/main/Survival Analysis - Heart Failure Report.pdf)
+The report of this survival analysis is available in the file [Survival Analysis - Heart Failure Report.pdf](https://github.com/timdgn/Survival-Analysis-Heart-Failure/blob/main/Survival%20Analysis%20-%20Heart%20Failure%20Report.pdf)
